@@ -72,25 +72,26 @@ class TrainedModelChkptBase(TrainedModelBase):
             self.restore_epoch(action, uid, maximize_score, state)
 
     def restore_epoch(self, action, uid, maximize_score, state):
-        checkpoints = (self.checkpoint_table & uid).fetch(
-            "score", "epoch", "state", as_dict=True,
-        )
-        if not checkpoints:
-            return
-        if action == "last":  # select last epoch
-            last_checkpoints = sorted(
-                checkpoints, key=lambda chkpt: chkpt["epoch"], reverse=False
+        with tempfile.TemporaryDirectory() as temp_dir:
+            checkpoints = (self.checkpoint_table & uid).fetch(
+                "score", "epoch", "state", as_dict=True, download_path=temp_dir
             )
-            checkpoint = last_checkpoints[-1]
-        else:  # select best epoch
-            best_checkpoints = sorted(
-                checkpoints, key=lambda chkpt: chkpt["score"], reverse=maximize_score,
-            )
-            checkpoint = best_checkpoints[0]
-        # restore the training state
-        state["epoch"] = checkpoint["epoch"]
-        state["score"] = checkpoint["score"]
-        loaded_state = torch.load(checkpoint["state"])
+            if not checkpoints:
+                return
+            if action == "last":  # select last epoch
+                last_checkpoints = sorted(
+                    checkpoints, key=lambda chkpt: chkpt["epoch"], reverse=False
+                )
+                checkpoint = last_checkpoints[-1]
+            else:  # select best epoch
+                best_checkpoints = sorted(
+                    checkpoints, key=lambda chkpt: chkpt["score"], reverse=maximize_score,
+                )
+                checkpoint = best_checkpoints[0]
+            # restore the training state
+            state["epoch"] = checkpoint["epoch"]
+            state["score"] = checkpoint["score"]
+            loaded_state = torch.load(checkpoint["state"])
         for key, state_entry in loaded_state.items():
             if key in state and hasattr(state[key], "load_state_dict"):
                 state[key].load_state_dict(state_entry)
